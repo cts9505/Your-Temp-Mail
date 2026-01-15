@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { Navbar } from "@/components/Navbar";
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Trash2, Calendar, User as UserIcon, Shield, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,40 +28,45 @@ export default function EmailDetailPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     setMounted(true);
+    if (authLoading) return;
+
     const fetchEmail = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       let allowedAlias: string | null = null;
 
       if (user) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("alias")
-          .eq("id", user.id)
-          .single();
-        if (profileData) allowedAlias = profileData.alias;
+        try {
+          const response = await fetch(`/api/profile?userId=${user.id}`);
+          if (response.ok) {
+            const profileData = await response.json();
+            allowedAlias = profileData.alias;
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
+        }
       } else {
         allowedAlias = await getGuestAliasFromCookie();
       }
 
-      const { data, error } = await supabase
-        .from("emails")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (data) {
-        // Basic security check: ensure the email belongs to the current alias
-        if (allowedAlias && data.recipient_alias === allowedAlias) {
-          setEmail(data);
+      try {
+        const response = await fetch(`/api/inbox/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          // Basic security check: ensure the email belongs to the current alias
+          if (allowedAlias && data.recipient_alias === allowedAlias) {
+            setEmail(data);
+          } else {
+            toast.error("Unauthorized access");
+            router.push("/inbox");
+          }
         } else {
-          toast.error("Unauthorized access");
+          toast.error("Email not found");
           router.push("/inbox");
         }
-      } else {
+      } catch (error) {
         toast.error("Email not found");
         router.push("/inbox");
       }
@@ -69,21 +74,21 @@ export default function EmailDetailPage({ params }: { params: Promise<{ id: stri
     };
 
     fetchEmail();
-  }, [id, router]);
+  }, [id, router, user, authLoading]);
 
   const deleteEmail = async () => {
-    const { error } = await supabase
-      .from("emails")
-      .delete()
-      .eq("id", id);
-
-    if (!error) {
-      toast.success("Email deleted");
-      router.push("/inbox");
+    try {
+      const response = await fetch(`/api/inbox/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        toast.success("Email deleted");
+        router.push("/inbox");
+      }
+    } catch (error) {
+      toast.error("Failed to delete email");
     }
   };
 
-  if (!mounted || loading) {
+  if (!mounted || loading || authLoading) {
     return (
       <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
         <Loader2 className="w-12 h-12 animate-spin text-indigo-600/20" />

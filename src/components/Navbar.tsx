@@ -3,35 +3,25 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { User } from "@supabase/supabase-js";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { Mail, User as UserIcon, LogOut, Inbox } from "lucide-react";
 
 export function Navbar() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, logout, loading } = useAuth();
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     router.push("/");
   };
 
-  if (!mounted) return null;
+  if (!mounted || loading) return null;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-black border-b-4 border-black dark:border-white">

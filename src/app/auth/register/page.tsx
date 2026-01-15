@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Loader2, AtSign, ArrowRight, UserPlus } from "lucide-react";
@@ -17,9 +17,10 @@ function RegisterForm() {
   const [alias, setAlias] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const domain = "yourtempmail.com";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const domain = "yourtempmail.com";
+  const { register } = useAuth();
 
 
   useEffect(() => {
@@ -34,41 +35,16 @@ function RegisterForm() {
     setLoading(true);
     setError(null);
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          alias: alias || undefined
-        }
-      }
-    });
+    const result = await register(email, password, alias || undefined);
 
-    if (signUpError) {
-      setError(signUpError.message);
+    if (!result.success) {
+      setError(result.error || "Registration failed");
       setLoading(false);
       return;
     }
 
-    if (data.user && alias) {
-      setTimeout(async () => {
-        try {
-          await fetch('/api/profile/alias', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: data.user!.id,
-              alias: alias.toLowerCase().replace(/[^a-z0-9]/g, '')
-            })
-          });
-        } catch (updateError) {
-          console.error("Error updating alias:", updateError);
-        }
-        router.push("/inbox");
-      }, 1000);
-    } else {
-      router.push("/inbox");
-    }
+    toast.success("Account created successfully!");
+    router.push("/inbox");
   };
 
   return (

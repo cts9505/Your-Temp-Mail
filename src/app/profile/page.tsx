@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
-import { supabase } from "@/lib/supabase";
-import { User } from "@supabase/supabase-js";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { User as UserIcon, Mail, Shield, AlertTriangle, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,38 +16,37 @@ interface Profile {
 }
 
 export default function ProfilePage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, logout, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/auth/login");
-        return;
-      }
-      setUser(user);
-      fetchProfile(user.id);
-    };
-
-    checkUser();
-  }, [router]);
+    if (authLoading) return;
+    
+    if (!user) {
+      router.push("/auth/login");
+      return;
+    }
+    
+    fetchProfile(user.id);
+  }, [user, authLoading, router]);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (data) setProfile(data);
+    try {
+      const response = await fetch(`/api/profile?userId=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
     setLoading(false);
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     router.push("/");
   };
 
@@ -60,7 +58,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -94,7 +92,7 @@ export default function ProfilePage() {
                 <span className="text-sm text-zinc-500">Active Alias</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">
-                    {profile?.alias}@yourtempmail.com
+                    {profile?.alias || user?.alias}@yourtempmail.com
                   </span>
                 </div>
               </div>

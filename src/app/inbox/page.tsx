@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
-import { supabase } from "@/lib/supabase";
-import { User } from "@supabase/supabase-js";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { 
   RefreshCcw, Trash2, Copy, Check, 
@@ -37,7 +36,7 @@ interface Profile {
 }
 
 export default function InboxPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,28 +53,29 @@ export default function InboxPage() {
 
   useEffect(() => {
     setMounted(true);
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      
+    const initInbox = async () => {
+      if (authLoading) return;
+
       let currentAlias = null;
 
       if (user) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("alias")
-          .eq("id", user.id)
-          .single();
-        
-        if (profileData) {
-          setProfile(profileData);
-          currentAlias = profileData.alias;
-          setActiveAlias(profileData.alias);
-          await setGuestAliasCookie(profileData.alias);
-          fetchEmailsByAlias(profileData.alias);
-        } else {
-          setLoading(false);
+        // Fetch profile from API
+        try {
+          const response = await fetch(`/api/profile?userId=${user.id}`);
+          if (response.ok) {
+            const profileData = await response.json();
+            setProfile(profileData);
+            currentAlias = profileData.alias;
+            setActiveAlias(profileData.alias);
+            if (profileData.alias) {
+              await setGuestAliasCookie(profileData.alias);
+              fetchEmailsByAlias(profileData.alias);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
         }
+        setLoading(false);
       } else {
         const guestAlias = await getGuestAliasFromCookie();
         if (guestAlias) {
@@ -87,56 +87,35 @@ export default function InboxPage() {
           setLoading(false);
         }
       }
-
-      if (currentAlias) {
-        const channel = supabase
-          .channel('emails_realtime_' + currentAlias)
-          .on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'emails',
-              filter: `recipient_alias=eq.${currentAlias}`
-            },
-            (payload) => {
-              setEmails((prev) => [payload.new as Email, ...prev]);
-              toast.success("New email received!");
-            }
-          )
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
-      }
     };
 
-    checkUser();
-  }, [router]);
+    initInbox();
+  }, [user, authLoading]);
 
   const fetchEmailsByAlias = async (alias: string) => {
     setRefreshing(true);
-    const { data, error } = await supabase
-      .from("emails")
-      .select("*")
-      .eq("recipient_alias", alias)
-      .order("received_at", { ascending: false });
-
-    if (data) setEmails(data);
+    try {
+      const response = await fetch(`/api/inbox?userId=${alias}`);
+      if (response.ok) {
+        const data = await response.json();
+        setEmails(data);
+      }
+    } catch (error) {
+      console.error("Error fetching emails:", error);
+    }
     setLoading(false);
     setRefreshing(false);
   };
 
   const deleteEmail = async (emailId: string) => {
-    const { error } = await supabase
-      .from("emails")
-      .delete()
-      .eq("id", emailId);
-
-    if (!error) {
-      setEmails(emails.filter((e) => e.id !== emailId));
-      toast.success("Email deleted");
+    try {
+      const response = await fetch(`/api/inbox/${emailId}`, { method: 'DELETE' });
+      if (response.ok) {
+        setEmails(emails.filter((e) => e.id !== emailId));
+        toast.success("Email deleted");
+      }
+    } catch (error) {
+      toast.error("Failed to delete email");
     }
   };
 
@@ -165,8 +144,9 @@ export default function InboxPage() {
     setIsChecking(true);
     const cleanAlias = customAlias.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     try {
-      const { data } = await supabase.from('profiles').select('alias').eq('alias', cleanAlias).maybeSingle();
-      if (!data) {
+      const response = await fetch(`/api/alias/check?alias=${cleanAlias}`);
+      const result = await response.json();
+      if (result.available) {
         await setGuestAliasCookie(cleanAlias);
         setIsChanging(false);
         setCustomAlias("");
