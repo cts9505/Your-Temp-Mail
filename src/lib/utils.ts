@@ -5,6 +5,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Generates a unique temporary alias using timestamp and random characters
+ * Format: <random><timestamp>
+ * Example: a7x9k2301 (5 random chars + 4 digit timestamp)
+ */
+export function generateUniqueTempAlias(): string {
+  const timestamp = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let random = "";
+  for (let i = 0; i < 5; i++) {
+    random += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${random}${timestamp}`;
+}
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   // Try navigator.clipboard first
   if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {

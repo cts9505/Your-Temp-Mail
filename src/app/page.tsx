@@ -1,8 +1,78 @@
+"use client";
+
 import { Navbar } from "@/components/Navbar";
 import TempMailHome from "@/components/TempMailHome";
 import { Shield, Zap, Lock, Globe, Trash2, Mail } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 export default function Home() {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const cardsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Animate title
+    if (titleRef.current) {
+      const chars = titleRef.current.querySelectorAll(".char");
+      gsap.fromTo(
+        chars,
+        { opacity: 0, y: 50, rotateX: -90 },
+        {
+          opacity: 1,
+          y: 0,
+          rotateX: 0,
+          duration: 0.8,
+          stagger: 0.05,
+          ease: "back.out(1.7)",
+          scrollTrigger: {
+            trigger: titleRef.current,
+            start: "top 60%",
+            end: "top 40%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+    }
+
+    // Animate cards
+    if (cardsRef.current) {
+      const cards = cardsRef.current.querySelectorAll(".feature-card");
+      cards.forEach((card, index) => {
+        gsap.fromTo(
+          card,
+          {
+            opacity: 0,
+            y: 100,
+            scale: 0.8,
+            rotateY: -15,
+          },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            rotateY: 0,
+            duration: 1,
+            delay: index * 0.15,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: card,
+              start: "top 75%",
+              end: "top 50%",
+              toggleActions: "play none none none",
+            },
+          }
+        );
+      });
+    }
+  }, []);
+
   const features = [
   {
     title: "Self-Destructing",
@@ -43,15 +113,23 @@ export default function Home() {
         {/* Core Benefits */}
         <section className="container mx-auto px-4 mt-32">
           <div className="flex flex-col items-center mb-16">
-            <h2 className="text-5xl md:text-7xl font-black uppercase tracking-tighter italic text-center">
-              Why <span className="text-indigo-600">YourTempMail?</span>
+            <h2 
+              ref={titleRef}
+              className="text-5xl md:text-7xl font-black uppercase tracking-tighter italic text-center"
+              style={{ perspective: "1000px" }}
+            >
+              {"Why YourTempMail?".split("").map((char, i) => (
+                <span key={i} className="char inline-block" style={{ transformStyle: "preserve-3d" }}>
+                  {char === " " ? "\u00A0" : char}
+                </span>
+              ))}
             </h2>
             <div className="h-4 w-48 bg-black dark:bg-white mt-4 shadow-[4px_4px_0px_0px_rgba(79,70,229,1)]" />
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div ref={cardsRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((f, i) =>
-            <div key={i} className="group border-4 border-black dark:border-white p-8 bg-white dark:bg-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all">
+              <div key={i} className="feature-card group border-4 border-black dark:border-white p-8 bg-white dark:bg-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all">
                 <div className={`w-16 h-16 border-4 border-black dark:border-white ${f.color} flex items-center justify-center text-white mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}>
                   {f.icon}
                 </div>
@@ -65,7 +143,7 @@ export default function Home() {
         </section>
 
         {/* Extra Features / Proof Points */}
-        <section className="container mx-auto px-4 mt-32">
+        {/* <section className="container mx-auto px-4 mt-32">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black dark:border-white">
             <div className="p-12 border-b-4 md:border-b-0 md:border-r-4 border-black dark:border-white bg-yellow-400 dark:bg-yellow-500">
               <h4 className="text-4xl font-black uppercase tracking-tighter italic mb-4">API Access</h4>
@@ -86,7 +164,7 @@ export default function Home() {
               </p>
             </div>
           </div>
-        </section>
+        </section> */}
 
         {/* Footer */}
         <footer className="container mx-auto px-4 py-20 mt-40 border-t-8 border-black dark:border-white text-center">

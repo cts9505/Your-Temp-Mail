@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import DOMPurify from "dompurify";
 import { toast } from "sonner";
 import { getGuestAliasFromCookie } from "@/lib/auth-utils";
+import { toIST } from "@/lib/time-utils";
 
 interface Email {
   id: string;
@@ -27,6 +28,7 @@ export default function EmailDetailPage({ params }: { params: Promise<{ id: stri
   const [email, setEmail] = useState<Email | null>(null);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [viewMode, setViewMode] = useState<'html' | 'text'>('html');
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
@@ -35,30 +37,49 @@ export default function EmailDetailPage({ params }: { params: Promise<{ id: stri
     if (authLoading) return;
 
     const fetchEmail = async () => {
-      let allowedAlias: string | null = null;
+      let allowedAliases: string[] = [];
 
+      // Check guest cookie first (for temp emails)
+      const guestAlias = await getGuestAliasFromCookie();
+      if (guestAlias) {
+        allowedAliases.push(guestAlias);
+      }
+
+      // Also check permanent alias for logged-in users
       if (user) {
         try {
           const response = await fetch(`/api/profile?userId=${user.id}`);
           if (response.ok) {
             const profileData = await response.json();
-            allowedAlias = profileData.alias;
+            if (profileData.alias && !allowedAliases.includes(profileData.alias)) {
+              allowedAliases.push(profileData.alias);
+            }
           }
         } catch (error) {
           console.error("Error fetching profile:", error);
         }
-      } else {
-        allowedAlias = await getGuestAliasFromCookie();
       }
+
+      console.log('Allowed aliases:', allowedAliases);
 
       try {
         const response = await fetch(`/api/inbox/${id}`);
         if (response.ok) {
           const data = await response.json();
-          // Basic security check: ensure the email belongs to the current alias
-          if (allowedAlias && data.recipient_alias === allowedAlias) {
+          console.log('Email recipient_alias:', data.recipient_alias);
+          // Check if email belongs to any of the user's aliases (temp or permanent)
+          if (allowedAliases.length > 0 && allowedAliases.includes(data.recipient_alias)) {
             setEmail(data);
+            // Mark as read
+            if (!data.is_read) {
+              fetch(`/api/inbox/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_read: true })
+              }).catch(err => console.error('Failed to mark as read:', err));
+            }
           } else {
+            console.error('Unauthorized: email belongs to', data.recipient_alias, 'but user has', allowedAliases);
             toast.error("Unauthorized access");
             router.push("/inbox");
           }
@@ -148,26 +169,59 @@ export default function EmailDetailPage({ params }: { params: Promise<{ id: stri
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Received</div>
-                  <div className="font-bold text-lg">{format(new Date(email.received_at), "PPP p")}</div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Received (IST)</div>
+                  <div className="font-bold text-lg">{format(toIST(email.received_at), "PPP p")}</div>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="p-8 md:p-12">
-            <div className="flex items-center gap-3 p-4 border-2 border-black bg-indigo-50 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-100 font-bold mb-10">
+            <div className="flex items-center gap-3 p-4 border-2 border-black bg-indigo-50 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-100 font-bold mb-6">
               <Shield className="w-6 h-6" />
               <span>Safe view enabled. Scripts and trackers were neutralized.</span>
             </div>
 
-            <div 
-              className="prose dark:prose-invert max-w-none font-medium text-lg leading-relaxed
-                prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tighter
-                prose-a:text-indigo-600 prose-a:font-black prose-a:no-underline hover:prose-a:underline
-                prose-strong:font-black prose-img:border-4 prose-img:border-black"
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-            />
+            {/* View Mode Toggle */}
+            <div className="flex gap-2 mb-6 border-2 border-black dark:border-white p-2 bg-zinc-50 dark:bg-zinc-950">
+              <button
+                onClick={() => setViewMode('html')}
+                className={`flex-1 py-2 px-4 font-black uppercase tracking-tighter transition-all ${
+                  viewMode === 'html'
+                    ? 'bg-black dark:bg-white text-white dark:text-black'
+                    : 'bg-transparent hover:bg-black/10 dark:hover:bg-white/10'
+                }`}
+              >
+                HTML Preview
+              </button>
+              <button
+                onClick={() => setViewMode('text')}
+                className={`flex-1 py-2 px-4 font-black uppercase tracking-tighter transition-all ${
+                  viewMode === 'text'
+                    ? 'bg-black dark:bg-white text-white dark:text-black'
+                    : 'bg-transparent hover:bg-black/10 dark:hover:bg-white/10'
+                }`}
+              >
+                Text View
+              </button>
+            </div>
+
+            {/* Content Display */}
+            {viewMode === 'html' ? (
+              <div 
+                className="prose dark:prose-invert max-w-none font-medium text-lg leading-relaxed
+                  prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tighter
+                  prose-a:text-indigo-600 prose-a:font-black prose-a:no-underline hover:prose-a:underline
+                  prose-strong:font-black prose-img:border-4 prose-img:border-black
+                  prose-table:border-2 prose-table:border-black prose-th:border prose-th:border-black
+                  prose-td:border prose-td:border-black"
+                dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+              />
+            ) : (
+              <div className="whitespace-pre-wrap font-mono text-sm bg-zinc-50 dark:bg-zinc-900 p-6 border-2 border-black dark:border-white">
+                {email.body_text}
+              </div>
+            )}
           </div>
         </div>
       </main>

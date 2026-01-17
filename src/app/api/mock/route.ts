@@ -1,5 +1,97 @@
-import { sql } from "@/lib/db";
-import { NextResponse } from "next/server";
+import { neon } from '@neondatabase/serverless';
+import { NextRequest, NextResponse } from "next/server";
+
+const sql = neon(process.env.DATABASE_URL!);
+
+/**
+ * GET /api/mock?alias=myalias - Generate 5 test emails for any alias
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const alias = searchParams.get('alias');
+
+    if (!alias) {
+      return NextResponse.json(
+        { error: 'Alias parameter is required. Usage: /api/mock?alias=youralias' },
+        { status: 400 }
+      );
+    }
+
+    // Check existing emails
+    const existing = await sql`
+      SELECT COUNT(*) as count FROM emails WHERE recipient_alias = ${alias}
+    `;
+
+    const existingCount = parseInt(existing[0].count);
+
+    // Insert 5 mock emails
+    await sql`
+      INSERT INTO emails (recipient_alias, sender, subject, body_text, body_html, received_at, is_read)
+      VALUES 
+        (
+          ${alias},
+          'welcome@yourtempmail.com',
+          'Welcome to Your Temp Mail!',
+          'Your temporary email is ready. You can now receive emails at ' || ${alias} || '@yourtempmail.com',
+          '<html><body><h1>Welcome!</h1><p>Your temporary email is ready.</p></body></html>',
+          NOW() - INTERVAL '2 hours',
+          false
+        ),
+        (
+          ${alias},
+          'notifications@github.com',
+          '[GitHub] New follower',
+          'Someone started following you on GitHub. Check out their profile!',
+          '<html><body><p>New follower notification</p></body></html>',
+          NOW() - INTERVAL '1 hour',
+          false
+        ),
+        (
+          ${alias},
+          'newsletter@techcrunch.com',
+          'TechCrunch Daily: Latest tech news',
+          'Here are today''s top tech stories and updates from the world of technology.',
+          '<html><body><h2>Newsletter</h2></body></html>',
+          NOW() - INTERVAL '30 minutes',
+          false
+        ),
+        (
+          ${alias},
+          'verify@service.com',
+          'Verify your email address',
+          'Click the link to verify: https://example.com/verify?code=ABC123XYZ',
+          '<html><body><a href="#">Verify Email</a></body></html>',
+          NOW() - INTERVAL '15 minutes',
+          false
+        ),
+        (
+          ${alias},
+          'alerts@app.com',
+          'Your verification code is 789456',
+          'Your verification code is: 789456. This code is valid for 10 minutes.',
+          '<html><body><h1>Verification Code: <strong>789456</strong></h1></body></html>',
+          NOW() - INTERVAL '5 minutes',
+          false
+        )
+    `;
+
+    return NextResponse.json({
+      success: true,
+      message: `Created 5 new emails for ${alias}@yourtempmail.com`,
+      alias,
+      previousCount: existingCount,
+      newCount: existingCount + 5
+    });
+
+  } catch (error: any) {
+    console.error('Mock email error:', error);
+    return NextResponse.json(
+      { error: 'Failed to create emails', details: error.message },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: Request) {
   const { userId, alias } = await request.json();
