@@ -50,27 +50,6 @@ export async function getGuestAliasFromCookie(): Promise<string | null> {
   }
 }
 
-  if (!encryptedAlias || !hash) {
-    console.log("⚠️ Missing cookies");
-    return null;
-  }
-
-  const alias = decryptAlias(encryptedAlias);
-  if (!alias) {
-    console.log("❌ Decryption returned null");
-    return null;
-  }
-
-  const expectedHash = await createAliasHash(alias);
-  if (hash === expectedHash) {
-    console.log("✅ Cookie validation successful:", alias);
-    return alias;
-  }
-
-  console.log("❌ Hash mismatch - cookie tampered or salt changed");
-  return null;
-}
-
 /**
  * Clears guest cookies
  */
